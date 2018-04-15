@@ -178,6 +178,9 @@ mean(iris$Sepal.Length)
 pc$scale
 sd(iris$Sepal.Length)
 print(pc) # in this case returns standard devs and rotations (also called loadings) of PCs
+# each PC is a normalized linear combination (each vector multiplied by a scalar) of the original variables
+# rotations/loadings are the coefficients of the linear combination of the continous variables
+# see also: https://www.youtube.com/watch?v=k7RM-ot2NWY&t=11s (Linear combinations, span, and basis vectors | Essence of linear algebra, chapter 2)
 summary(pc) # here we can see how much of the variance is covered by each PC
 
 # Orthogonality of PCs
@@ -206,5 +209,57 @@ print(g)
 
 ### ii. Apply a SOM to the iris data, and inspect its performance graphically.
 
+# Procedure for SOM creation (lecture notes):
+# https://lms.beuth-hochschule.de/pluginfile.php/707289/mod_resource/content/4/DimRedScript.html#41_procedure_for_som_creation
+# see also the following video (especially at min 6:46):
+# https://www.youtube.com/watch?v=GdZckTLNqsY&t=14s
+
+library(kohonen)
+library(RColorBrewer)
+
+old <- cur <- Inf
+dat <- scale(iris[,-5])
+## iterative improvement of SOM
+for (i in 1:100){
+  erg <- som(dat, grid=somgrid(6,6,"hexagonal"), rlen=1000)
+  cur <- sum(erg$distances)
+  if (cur<old){
+    erg2 <- erg
+    old <- cur
+  }
+}
+plot.somgrid <- function (x, xlim, ylim, ...) 
+{
+  if (missing(xlim)) 
+    xlim <- c(0, max(x$pts[, 1]) + min(x$pts[, 1]))
+  if (missing(ylim)) 
+    ylim <- c(max(x$pts[, 2]) + min(x$pts[, 2]), 0)
+  plot(xlim, ylim, axes = FALSE, type = "n", xlab = "", 
+       ylab = "", asp=1, ...)
+}
+assignInNamespace("plot.somgrid",
+                  plot.somgrid, "kohonen")
+
+som2pts <- function(x){
+  stopifnot("kohonen" %in% class(x))
+  x$grid$pts[x$unit.classif,]
+}
+
+som_out <- som2pts(erg2)
+
+mm <- cbind(rep(c(1,2),each=2), rep(3:4, each=2))
+widths <- c(3,2); heights <- rep(1,6)
+layout(mm, widths=widths, heights=heights)
+pal <- function(n) brewer.pal(n, "Set3")
+plot(erg2, shape="straight", palette.name=pal)
+plot(erg2, shape="straight", type="mapping", col=iris[,5], pch=19)
+legend("left", title="Species", levels(iris[,5]), fill=unique(iris[,5]), horiz=FALSE, cex=0.8)
+#plot(erg2, shape="straight", type="mapping", cex=0)
+#text(som_out + runif(47)*0.5-0.25, labels=substr(iris[,5],1,2), cex=0.8)
+plot(erg2, shape="straight", type="dist.neighbours")
+plot(erg2, shape="straight", type="quality")
+
+# see also: Second case study: the iris dataset
+# https://cran.r-project.org/web/packages/SOMbrero/vignettes/doc-numericSOM.html
 
 

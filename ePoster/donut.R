@@ -1,5 +1,6 @@
-
-# The doughnut function permits to draw a donut plot
+# doughnut function to draw a donut plot
+# the function works like PiePlot
+# inner.radius controls the width of the ring
 doughnut <-
   function (x, labels = names(x), edges = 200, outer.radius = 0.8, 
             inner.radius=0.6, clockwise = FALSE,
@@ -66,11 +67,15 @@ doughnut <-
     invisible(NULL)
   }
 
-
-val=c(24,21,14,6,35)
-nam=c("AFOLU*","Industry","Transport","Buildings","Energy")
+#datasource: http://www.fao.org/3/a-i6340e.pdf
+val=c(14,21,24,6,35)
+nam=c("Transport","Industry","AFOLU*","Buildings","Energy")
 names(val)=paste(nam," (",val,"%)",sep="")
 
-# Let's use the function, it works like PiePlot !
-# inner.radius controls the width of the ring!
 doughnut(val, inner.radius=0.5, col=c(rgb(0.2,0.2,0.4,0.5), rgb(0.8,0.2,0.4,0.5), rgb(0.2,0.9,0.4,0.4) , rgb(0.0,0.9,0.8,0.4), rgb(0.0,0.9,0.8,0.7)) )
+
+library(RColorBrewer)
+doughnut(val, inner.radius=0.5, outer.radius=0.9, col=brewer.pal(5, "Accent"), main="Sector Contributions to Climate Change")
+doughnut(val, inner.radius=0.4, outer.radius=0.8, col=brewer.pal(5, "Accent"), cex=1.75)
+mtext("*Agriculture, Forestry and Other Land Use", side=1, cex=1.75)
+

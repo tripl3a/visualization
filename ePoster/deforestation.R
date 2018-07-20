@@ -5,6 +5,8 @@ library(countrycode)
 library(treemap)
 library(RColorBrewer)
 library(ggplot2)
+library(mice)
+library(plotly)
 
 setwd(dirname(rstudioapi::getSourceEditorContext()$path))
 
@@ -22,6 +24,22 @@ data = data[,-paste("Y",1990:2015,"F",sep="")]
 
 # remove other columns we don't need
 data = data[,-c("Country Code", "Item Code", "Element Code", "Item", "Element", "Unit")]
+
+# merge Russia's values
+data[Country=="Russian Federation",c("Y1990","Y1991")] = data[Country=="USSR",c("Y1990","Y1991")]
+data = data[Country!="USSR"]
+
+# merge Ethipoia's values
+data[Country=="Ethiopia",c("Y1990","Y1991","Y1992")] = data[Country=="Ethiopia PDR",c("Y1990","Y1991","Y1992")]
+data = data[Country!="Ethiopia PDR"]
+
+# update some country names for the treemap to look better
+data[Country=="Russian Federation"]$Country = "Russia" 
+data[Country %like% "Bolivia"]$Country = "Bolivia"
+data[Country %like% "Tanzania"]$Country = "Tanzania"
+data[Country %like% "Sudan"]$Country = "Sudan"
+data[Country %like% "Venezuela"]$Country = "Venezuela"
+data[Country == "Democratic People's Republic of Korea"]$Country = "North Korea"
 
 # ----------------------
 
@@ -52,6 +70,49 @@ deforest = data.table(select(deforest, ISOCode, Country, Year=Year.x, Value=Valu
 # calcualte the (de)forestation since 1990
 deforest$Ratio1990 = deforest$Value/deforest$Value1990-1
 deforest$Change1990 = deforest$Value-deforest$Value1990
+# missing values?
+dim(deforest[is.na(Change1990)])
+dim(deforest[!is.na(Change1990)])
+
+################################################################
+# HANDLE MISSING VALUES
+################################################################
+
+# # type conversions (mice expects numeric or factors)
+# deforest$Country = as.factor(deforest$Country)
+# deforest$ISOCode = as.factor(deforest$ISOCode)
+# 
+# # inspect data where population is na
+# sapply(deforest, function(x) sum(is.na(x)))
+# deforest[is.na(Change1990)] %>% group_by(Country) %>% summarise(freq=n())
+# deforest[order(deforest$Country,deforest$Year),][is.na(Change1990)]
+# na_countries = unique(deforest[is.na(Change1990)]$Country)
+# na_deforest = deforest[Country %in% na_countries,c("ISOCode","Country","Year","Value")]
+
+# plot before imputation
+# ggplotly(ggplot(na_deforest, aes(Year, Value)) +
+#   geom_point(aes(color = Country)))
+
+# # perform multiple imputation
+# md.pattern(na_deforest)
+# deforest_imp = mice(na_deforest, seed=500)
+# deforest_imp = mice::complete(deforest_imp)
+# deforest_imp=as.data.table(deforest_imp)
+# # plot after imputation
+# ggplotly(ggplot(deforest_imp, aes(Year, Value)) +
+#   geom_point(aes(color = Country)))
+
+# # write back imputed data
+# dim(pop)
+# pop = pop[-which(pop[,pop$CountryCode %in% na_countries]),]
+# dim(pop)
+# 11395-11289
+# pop = bind_rows(pop, deforest_imp)
+# dim(pop)
+
+################################################################
+# VISUALIZE
+################################################################
 
 # plot deforestisation ratio by country
 deforest$Ratio1990 = deforest$Ratio1990*-1 #temp change to plot
@@ -62,7 +123,8 @@ treemap(as.data.frame(deforest[Year==2015 & Ratio1990>0]),
         vColor="Ratio1990",type="value", #add legend
         title.legend="Deforestation Rate",
         palette="Reds",mapping=c(0, 0.35, 0.7),#range=c(0,0.8)
-        title="Deforestation 1990-2015")
+        title="Deforestation by Country (1990-2015)",
+        fontsize.title=20,fontsize.labels=16,fontsize.legend=16)
 deforest$Ratio1990 = deforest$Ratio1990*-1 #temp change to plot
 deforest$Change1990 = deforest$Change1990*-1 #temp change to plot
 
@@ -93,28 +155,31 @@ deforest[Year==2015 & is.na(Change1990)]
 deforest[Year==1992 & is.na(Change1990)]
 
 landarea = fread("./data/world-bank_land-area/API_AG.LND.TOTL.K2_DS2_en_csv_v2_9985640.csv",header=T)
-landarea = landarea %>% filter(`Country Name` %in% c("Germany","Netherlands","Poland","Austria","Denmark","Belgium","Switzerland","Czech Republic","France")) %>% select(c("Country Name", "2015"))
+#landarea = landarea %>% filter(`Country Name` %in% c("Germany","Netherlands","Poland","Austria","Denmark","Belgium","Switzerland","Czech Republic","France")) %>% select(c("Country Name", "Country Code", "2015"))
+landarea = landarea %>% filter(`Country Name` %in% c("Romania","Germany","Poland","Italy", "Greece")) %>% select(c("Country Name", "2015"))
 landarea %>% summarise(val=sum(`2015`))
 
-comp = bind_rows(
-  data.table(Group="Land Area",
+comp = data.table(Group="Land Area",
              Name=landarea$`Country Name`,
-             sq.km=landarea$`2015`),
+             sq.km=landarea$`2015`)
+comp=comp[order(rank(-sq.km))] #sort dt
+comp=bind_rows(comp,
   data.table(Group="Deforested Area",
-             Name=c("Worldwide"),
-             sq.km=(world$Y2015-world$Y1990)*-10)
+             Name=c("Agriculture", "Others"),
+             sq.km=c((world$Y2015-world$Y1990)*-10*0.8, (world$Y2015-world$Y1990)*-10*0.2))
   )
-comp=comp[order(rank(sq.km))]
 
 ggplot(data = comp, aes(x=Group, y=sq.km, group = Group)) + theme_bw() +
   geom_col(aes(fill = Name), colour="black", size=.3) +
   #scale_fill_brewer(palette="Set3") +
   scale_fill_grey(start=1,end=1) +
-  geom_text(aes(label = Name), size=3.5, position = position_stack(vjust = 0.5))+ 
+  geom_text(aes(label=Name), size=7.5, position=position_stack(vjust=0.5), angle=-45)+ 
   theme(legend.position="none", axis.title.x=element_blank(), axis.title.y=element_blank(),
-        axis.text.x=element_text(colour="black", size = 10),
-        axis.text.y=element_text(colour="black", size = 10)) +
-  ggtitle("Deforested vs. Land Area (km²)") +
-  scale_y_continuous(breaks=c(500000,1000000,1500000), labels=c("500.000","1.000.000","1.500.000"))
+        axis.text.x=element_text(colour="black", size=20),
+        axis.text.y=element_text(colour="black", size=20, angle=-45),
+        plot.title = element_text(size=25)) +
+  ggtitle("Worldwide Deforestation vs. Country Land Area (km²)") +
+  scale_y_continuous(breaks=c(500000,1000000,1500000), labels=c("500.000","1.000.000","1.500.000")) +
+  coord_flip()
   
 
